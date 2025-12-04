@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pip-Boy Mod Garage</title>
+    <!-- MediaPipe 库 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <!-- 复古字体 & 图标 -->
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+        /* --- 0. 全局变量 --- */
+        :root {
+            --pip-green: #1eff00;
+            --pip-dim: #0f4d00;
+            --pip-bg: #050505;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background-color: var(--pip-bg);
+            color: var(--pip-green);
+            font-family: 'VT323', monospace;
+            margin: 0; overflow: hidden; height: 100vh;
+            user-select: none; cursor: none;
+        }
+
+        /* --- 1. 特效层 --- */
+        .scanlines {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%; pointer-events: none; z-index: 9000; opacity: 0.5;
+        }
+        .crt-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.8); pointer-events: none; z-index: 9001;
+        }
+
+        /* 启动画面 */
+        #boot-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 100000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        #boot-text { font-size: 30px; animation: blink 1s infinite; text-align: center; }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* --- 2. 光标 --- */
+        #cursor {
+            position: fixed; width: 20px; height: 20px;
+            border: 2px solid var(--pip-green); border-radius: 50%;
+            transform: translate(-50%, -50%); pointer-events: none;
+            z-index: 2147483647; box-shadow: 0 0 10px var(--pip-green);
+            transition: width 0.1s, height 0.1s;
+        }
+        #cursor::before { content:''; position:absolute; top:8px; left:-8px; width:36px; height:2px; background:var(--pip-green); opacity: 0.6; }
+        #cursor::after { content:''; position:absolute; left:8px; top:-8px; width:2px; height:36px; background:var(--pip-green); opacity: 0.6; }
+        #cursor.clicking { background: var(--pip-green); width: 12px; height: 12px; box-shadow: 0 0 20px #fff; }
+
+        /* --- 3. 布局 --- */
+        .container {
+            display: grid; grid-template-rows: 70px 1fr;
+            height: 100vh; max-width: 1600px; margin: 0 auto;
+            border-left: 2px solid var(--pip-dim); border-right: 2px solid var(--pip-dim);
+        }
+
+        header {
+            border-bottom: 2px solid var(--pip-green);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 30px; background: rgba(0, 20, 0, 0.95); z-index: 50;
+        }
+
+        .user-status-area { display: flex; align-items: center; gap: 20px; }
+        .login-btn-top {
+            border: 1px solid var(--pip-green); padding: 5px 20px;
+            font-size: 20px; color: var(--pip-green);
+            transition: 0.2s; font-family: 'VT323';
+        }
+        .login-btn-top.hovered { background: var(--pip-green); color: #000; box-shadow: 0 0 10px var(--pip-green); }
+        .user-label { display: none; font-size: 18px; color: var(--pip-dim); }
+        .user-label.active { display: block; }
+
+        .main-body {
+            display: grid; grid-template-columns: 220px 1fr;
+            overflow: hidden; position: relative;
+        }
+
+        /* 侧边栏 */
+        nav {
+            border-right: 2px solid var(--pip-green); padding: 20px;
+            display: flex; flex-direction: column; gap: 10px; background: rgba(0, 10, 0, 0.8);
+        }
+        .nav-btn {
+            background: transparent; border: 1px solid var(--pip-dim);
+            color: var(--pip-dim); padding: 12px; font-size: 22px;
+            text-align: left; transition: 0.2s; font-family: 'VT323';
+        }
+        .nav-btn.active, .nav-btn.hovered {
+            border-color: var(--pip-green); color: var(--pip-green);
+            background: rgba(30, 255, 0, 0.1); text-shadow: 0 0 5px var(--pip-green);
+        }
+        .nav-btn-new { border: 1px dashed var(--pip-green); margin-bottom: 20px; text-align: center; }
+
+        /* 内容区 */
+        #content-area { position: relative; height: 100%; overflow: hidden; background: rgba(0,0,0,0.3); }
+
+        .scroll-controls {
+            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 40px; z-index: 8000;
+            background: rgba(0, 0, 0, 0.9); padding: 5px 30px;
+            border: 1px solid var(--pip-dim); border-radius: 30px;
+        }
+        .scroll-btn {
+            width: 50px; height: 50px; border: 2px solid var(--pip-green); border-radius: 50%;
+            background: #000; color: var(--pip-green); font-size: 24px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .scroll-btn.active-scroll, .scroll-btn.hovered { background: var(--pip-green); color: #000; }
+
+        /* 列表视图 */
+        #list-view { padding: 80px 40px 100px 40px; height: 100%; overflow-y: auto; }
+        ::-webkit-scrollbar { display: none; }
+
+        .post-card {
+            display: flex; border: 1px solid var(--pip-dim); margin-bottom: 20px;
+            background: rgba(0, 20, 0, 0.6); transition: 0.2s; height: 130px;
+            position: relative;
+        }
+        .post-card.hovered { border-color: var(--pip-green); box-shadow: 0 0 15px var(--pip-dim); }
+        .post-thumb {
+            width: 160px; height: 100%; object-fit: cover; border-right: 1px solid var(--pip-dim);
+            filter: grayscale(100%) sepia(100%) hue-rotate(80deg) saturate(200%) contrast(1.2);
+        }
+        .post-info { padding: 15px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+        .post-title { font-size: 24px; font-weight: bold; color: var(--pip-green); margin-bottom: 5px; }
+
+        .btn-like {
+            display: inline-flex; align-items: center; gap: 8px;
+            border: 1px solid var(--pip-dim); padding: 5px 10px;
+            font-size: 18px; color: var(--pip-dim); width: fit-content; margin-top: 5px; transition: 0.2s;
+        }
+        .btn-like.liked { border-color: var(--pip-green); background: var(--pip-green); color: #000; }
+        .btn-like.hovered { border-color: var(--pip-green); color: var(--pip-green); }
+        .btn-like.liked.hovered { background: #fff; }
+
+        .avatar {
+            width: 40px; height: 40px; border: 1px solid var(--pip-green);
+            background: #000; margin-right: 10px; flex-shrink: 0;
+            filter: sepia(100%) hue-rotate(50deg) saturate(300%);
+        }
+        .avatar.hovered { transform: scale(1.1); box-shadow: 0 0 10px var(--pip-green); border-color: #fff; }
+
+        /* --- 4. 详情页 --- */
+        #detail-view {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(5, 10, 5, 0.98); z-index: 100;
+            padding: 80px 50px 100px 50px; overflow-y: auto;
+        }
+        .back-btn {
+            display: inline-block; border: 1px solid var(--pip-green); padding: 5px 20px;
+            margin-bottom: 20px; font-size: 20px; background: #000;
+        }
+        .back-btn.hovered { background: var(--pip-green); color: #000; }
+        .detail-img-full {
+            width: 100%; max-height: 400px; object-fit: cover; border: 2px solid var(--pip-dim);
+            margin-bottom: 20px; filter: grayscale(100%) sepia(100%) hue-rotate(80deg) saturate(200%);
+        }
+        .detail-body { font-size: 22px; line-height: 1.6; margin-bottom: 40px; border-left: 4px solid var(--pip-dim); padding-left: 20px; white-space: pre-wrap; }
+
+        /* 评论样式 */
+        .comment-node { margin-bottom: 20px; }
+        .comment-main { 
+            border: 1px solid var(--pip-dim); padding: 15px; background: rgba(0, 30, 0, 0.3);
+            display: flex; gap: 15px; align-items: flex-start;
+        }
+        .comment-sub { 
+            margin-left: 50px; border-left: 2px dashed var(--pip-dim); 
+            padding-left: 15px; margin-top: 10px; 
+        }
+        .sub-item {
+            display: flex; gap: 10px; margin-bottom: 10px; padding: 10px;
+            background: rgba(0,0,0,0.5); border: 1px solid #002200;
+        }
+
+        /* --- 5. 模态框 (登录 & 发帖) --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9); z-index: 20000;
+            align-items: center; justify-content: center; backdrop-filter: blur(5px);
+        }
+        .modal-box {
+            width: 600px; border: 2px solid var(--pip-green); background: #050505;
+            padding: 30px; position: relative; box-shadow: 0 0 30px var(--pip-dim);
+        }
+        .modal-close { position: absolute; top: 10px; right: 15px; font-size: 30px; }
+        .modal-close.hovered { color: #fff; }
+
+        .form-input, .form-textarea {
+            width: 100%; background: #000; border: 1px solid var(--pip-dim);
+            color: var(--pip-green); font-family: 'VT323'; font-size: 24px; padding: 10px; margin-bottom: 15px;
+        }
+        .form-textarea { height: 150px; resize: none; }
+        .form-input.hovered, .form-textarea.hovered { border-color: var(--pip-green); background: #001100; }
+        
+        .btn-action {
+            width: 100%; background: var(--pip-dim); color: #fff; border: none;
+            padding: 15px; font-size: 24px; font-family: 'VT323'; margin-bottom: 10px;
+        }
+        .btn-action.hovered { background: var(--pip-green); color: #000; }
+
+        /* 发帖工具栏 */
+        .post-toolbar { display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--pip-dim); padding-bottom: 10px; position: relative; }
+        .toolbar-btn {
+            border: 1px solid var(--pip-dim); padding: 5px 15px; font-size: 20px; color: var(--pip-dim);
+        }
+        .toolbar-btn.hovered { color: var(--pip-green); border-color: var(--pip-green); }
+
+        /* Emoji 选择器 */
+        #emoji-grid {
+            display: none; position: absolute; top: 50px; left: 0; 
+            background: #000; border: 1px solid var(--pip-green); padding: 10px;
+            grid-template-columns: repeat(5, 1fr); gap: 5px; z-index: 5000;
+        }
+        .emoji-item { font-size: 24px; cursor: pointer; padding: 5px; }
+        .emoji-item.hovered { background: var(--pip-green); }
+
+        /* 社交登录 */
+        .social-btn {
+            flex: 1; border: 1px solid var(--pip-dim); padding: 10px;
+            text-align: center; color: var(--pip-dim); font-size: 20px;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .social-btn.hovered { border-color: var(--pip-green); color: var(--pip-green); }
+
+        /* 悬浮窗 */
+        #user-tooltip {
+            display: none; position: fixed; width: 300px; 
+            background: #000; border: 2px solid var(--pip-green);
+            padding: 15px; z-index: 99999; pointer-events: none;
+        }
+
+        .input_video { display: none; }
+        /* 隐藏的真实文件输入框 */
+        #real-file-input { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="scanlines"></div>
+    <div class="crt-overlay"></div>
+    <div id="cursor"></div>
+    <video class="input_video"></video>
+    <!-- 真实文件上传控件 (隐藏) -->
+    <input type="file" id="real-file-input">
+
+    <!-- 启动画面 -->
+    <div id="boot-screen">
+        <div id="boot-text">
+            > PIP-BOY MOD GARAGE<br>
+            > OS V9.0 ONLINE<br><br>
+            [ CLICK TO INITIALIZE ]
+        </div>
+    </div>
+
+    <!-- 悬浮窗 -->
+    <div id="user-tooltip">
+        <div style="border-bottom:1px solid var(--pip-dim); margin-bottom:5px;">USER DATA</div>
+        <div id="tt-content"></div>
+    </div>
+
+    <!-- 1. 登录模态框 -->
+    <div id="login-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-close" data-target="login-modal">×</div>
+            <h2>IDENTITY VERIFICATION</h2>
+            <input type="text" class="form-input" placeholder="PIP-BOY ID" value="The_Survivor">
+            <input type="password" class="form-input" placeholder="PASSPHRASE" value="*******">
+            <button class="btn-action" id="btn-login-submit">AUTHENTICATE</button>
+            <div style="display:flex; gap:10px;">
+                <div class="social-btn"><i class="fab fa-google"></i> GOOGLE</div>
+                <div class="social-btn"><i class="fab fa-facebook-f"></i> FACEBOOK</div>
+                <div class="social-btn"><i class="fab fa-apple"></i> APPLE</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 发帖模态框 -->
+    <div id="post-modal" class="modal-overlay">
+        <div class="modal-box" style="width: 700px;">
+            <div class="modal-close" data-target="post-modal">×</div>
+            <h2>TRANSMIT NEW ENTRY</h2>
+            
+            <input type="text" class="form-input" id="post-title" placeholder="SUBJECT LINE (PINCH TO AUTO-FILL)">
+            
+            <div class="post-toolbar">
+                <div class="toolbar-btn" data-type="file"><i class="fas fa-image"></i> IMG</div>
+                <div class="toolbar-btn" data-type="file"><i class="fas fa-video"></i> VID</div>
+                <div class="toolbar-btn" data-type="file"><i class="fas fa-paperclip"></i> ATT</div>
+                <div class="toolbar-btn" id="btn-emoji"><i class="far fa-smile"></i> EMOJI</div>
+                
+                <!-- Emoji Grid -->
+                <div id="emoji-grid">
+                    <div class="emoji-item">☢️</div><div class="emoji-item">👍</div><div class="emoji-item">💀</div><div class="emoji-item">💩</div><div class="emoji-item">🔫</div>
+                    <div class="emoji-item">🤖</div><div class="emoji-item">💊</div><div class="emoji-item">💣</div><div class="emoji-item">🛠️</div><div class="emoji-item">👽</div>
+                </div>
+            </div>
+
+            <textarea class="form-textarea" id="post-body" placeholder="ENTER MESSAGE DATA... (PINCH TO AUTO-FILL)"></textarea>
+
+            <button class="btn-action" id="btn-post-submit">TRANSMIT DATA</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>PIP-BOY MOD GARAGE</h1>
+            <div class="user-status-area">
+                <div class="user-label" id="header-username">USER: VAULT_DWELLER</div>
+                <div class="login-btn-top" id="btn-auth">LOGIN / SIGNUP</div>
+            </div>
+        </header>
+
+        <div class="main-body">
+            <nav>
+                <div class="nav-btn nav-btn-new" id="btn-open-post">[+] NEW_ENTRY</div>
+                <div class="nav-btn active" data-cat="ALL">LATEST_FEED</div>
+                <div class="nav-btn" data-cat="DISCUSSION">DISCUSSIONS</div>
+                <div class="nav-btn" data-cat="MOD_REL">MOD_RELEASES</div>
+                <div class="nav-btn" data-cat="HELP">TECH_SUPPORT</div>
+                <div class="nav-btn" data-cat="OFF_TOPIC">WASTELAND_CHAT</div>
+            </nav>
+
+            <div id="content-area">
+                <div class="scroll-controls">
+                    <div class="scroll-btn" id="scroll-up">▲</div>
+                    <div class="scroll-btn" id="scroll-down">▼</div>
+                </div>
+
+                <div id="list-view"></div>
+
+                <div id="detail-view">
+                    <div class="back-btn" id="btn-back"> < BACK </div>
+                    <div id="detail-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 0. 音频引擎 ---
+        const AudioSys = {
+            ctx: null,
+            init: function() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    this.ctx.resume();
+                }
+            },
+            play: function(freq, type, dur, vol = 0.1) {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type; osc.frequency.value = freq;
+                gain.gain.value = vol; gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + dur);
+            },
+            hover: function() { this.play(800, 'sine', 0.05, 0.05); },
+            click: function() { this.play(300, 'square', 0.08, 0.1); },
+            type: function() { this.play(600 + Math.random()*200, 'triangle', 0.05, 0.05); },
+            success: function() { this.play(400, 'square', 0.1, 0.1); setTimeout(() => this.play(600, 'square', 0.1, 0.1), 100); },
+            logout: function() { this.play(300, 'sawtooth', 0.3, 0.2); setTimeout(() => this.play(100, 'sawtooth', 0.4, 0.2), 200); },
+            upload: function() { const now = this.ctx.currentTime; for(let i=0; i<10; i++) setTimeout(() => this.play(1000 + Math.random()*1000, 'square', 0.05, 0.05), i*50); }
+        };
+
+        // --- 1. 状态管理 ---
+        const State = {
+            isLoggedIn: false,
+            currentUser: { name: "Guest", avatar: "" },
+            posts: []
+        };
+
+        document.getElementById('boot-screen').addEventListener('click', function() {
+            AudioSys.init(); AudioSys.success(); this.style.display = 'none';
+        });
+
+        // --- 2. 真实内容数据 (还原 V6 风格) ---
+        const userPrefix = ["Nuka", "Vault", "Deathclaw", "Radioactive", "Piper", "Ghoul", "Plasma", "Laser"];
+        const userSuffix = ["Slayer", "Survivor", "Lover", "Fan69", "Master", "King", "Enjoyer", "_Official"];
+
+        const rawContent = [
+            { cat: "HELP", title: "MY GAME KEEPS CRASHING IN BOSTON!!!", body: "Every time I walk near Swan's Pond, CTD. I have 400 mods installed. Is it the 8k spoon texture mod? Please help, I'm losing my mind.", reply: "Post your load order or we can't help you." },
+            { cat: "MOD_REL", title: "[Release] Thomas the Tank Engine Deathclaws V2", body: "Updated the mesh. Now with 400% more distinct whistle sounds. Immersive? No. Terrifying? Yes.", reply: "This is why the bombs dropped." },
+            { cat: "DISCUSSION", title: "Unpopular Opinion: Preston isn't that bad", body: "Hear me out. He just wants to help people. The radiant quests are annoying but the guy has a heart of gold.", reply: "Another settlement needs your help. I'll mark it on your map." },
+            { cat: "HELP", title: "Purple textures everywhere?", body: "I installed CBBE and now everyone has purple skin. What did I do wrong? I'm using Vortex.", reply: "You missed the texture archive. Reinstall it properly." },
+            { cat: "MOD_REL", title: "Realistic Rust Overhaul 4K", body: "Replaces all rust textures with high-res photos I took at a local junkyard. 4GB VRAM required minimum.", reply: "My GPU is crying just looking at the screenshots." },
+            { cat: "OFF_TOPIC", title: "Just found a teddy bear reading a newspaper", body: "Bethesda environmental storytelling is top tier. Found this in a subway toilet. Anyone else find weird teddy bear setups?", reply: "Wait until you find the one with the handcuffs..." },
+            { cat: "DISCUSSION", title: "New Vegas vs Fallout 4 - Let's argue", body: "NV has better writing, FO4 has better gunplay. Discuss.", reply: "Here we go again..." },
+            { cat: "HELP", title: "Pip-Boy light not working", body: "Pressed Tab, nothing happens. Is my bulb broken? (Ingame obviously)", reply: "Did you hold the key? Long press for light." },
+            { cat: "MOD_REL", title: "Immersive Toilet Paper (Correct Orientation)", body: "Fixes the game-breaking bug where TP rolls are facing the wall. Immersion saved.", reply: "It just works." },
+            { cat: "OFF_TOPIC", title: "Ad Victoriam Brothers!", body: "Just joined the Brotherhood on my 5th playthrough. That airship entrance never gets old.", reply: "Institute for life. Better showers." }
+        ];
+
+        function getRandomUser() {
+            const name = userPrefix[Math.floor(Math.random()*userPrefix.length)] + userSuffix[Math.floor(Math.random()*userSuffix.length)] + Math.floor(Math.random()*99);
+            return {
+                name: name,
+                avatar: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${name}`,
+                faction: ["Brotherhood", "Institute", "Railroad", "Minutemen", "Raider"][Math.floor(Math.random()*5)],
+                regDate: `20${Math.floor(Math.random()*10+15)}.${Math.floor(Math.random()*12+1)}`,
+                karma: Math.random() > 0.5 ? "Good" : "Neutral"
+            };
+        }
+
+        function initData() {
+            for (let i = 0; i < 30; i++) {
+                const template = rawContent[Math.floor(Math.random() * rawContent.length)];
+                const author = getRandomUser();
+                const commentCount = Math.floor(Math.random() * 4) + 1;
+                const comments = [];
+                for(let j=0; j<commentCount; j++) {
+                    const cUser = getRandomUser();
+                    const replies = [template.reply, "Endorsed!", "Works for me.", "Update plzzzz", "Can you make a patch for this?", "LMAO", "Delete this.", "War... war never changes."];
+                    comments.push({
+                        user: cUser,
+                        text: replies[Math.floor(Math.random() * replies.length)]
+                    });
+                }
+
+                State.posts.push({
+                    id: i,
+                    category: template.cat,
+                    title: template.title,
+                    author: author,
+                    likes: Math.floor(Math.random() * 5000) + 5,
+                    isLiked: false,
+                    image: `https://picsum.photos/seed/${i + 888}/600/300`,
+                    content: template.body + "\n\n(Posted from Pip-Boy Mod Garage V9.0)",
+                    comments: comments
+                });
+            }
+            renderList("ALL");
+        }
+
+        // --- 3. 渲染 UI ---
+        const listView = document.getElementById('list-view');
+        const detailView = document.getElementById('detail-view');
+        const detailContent = document.getElementById('detail-content');
+
+        function renderList(cat) {
+            listView.innerHTML = "";
+            const filtered = cat === "ALL" ? State.posts : State.posts.filter(p => p.category === cat);
+            filtered.forEach(post => {
+                const div = document.createElement('div');
+                div.className = 'post-card';
+                div.dataset.id = post.id;
+                const uStr = encodeURIComponent(JSON.stringify(post.author));
+                div.innerHTML = `
+                    <img src="${post.image}" class="post-thumb">
+                    <div class="post-info">
+                        <div class="post-title">${post.title}</div>
+                        <div style="display:flex; justify-content:space-between; align-items:end;">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <img src="${post.author.avatar}" class="avatar" data-user="${uStr}">
+                                <div style="color:var(--pip-dim)">${post.author.name}</div>
+                            </div>
+                            <div class="btn-like ${post.isLiked?'liked':''}" data-pid="${post.id}">
+                                <i class="fas fa-thumbs-up"></i> <span class="like-num">${post.likes}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                listView.appendChild(div);
+            });
+        }
+
+        function showDetail(id) {
+            const post = State.posts.find(p=>p.id == id);
+            if(!post) return;
+            const uStr = encodeURIComponent(JSON.stringify(post.author));
+            
+            let commentsHtml = post.comments.map(c => {
+                const cStr = encodeURIComponent(JSON.stringify(c.user));
+                return `
+                <div class="comment-node">
+                    <div class="comment-main">
+                        <img src="${c.user.avatar}" class="avatar" data-user="${cStr}">
+                        <div><span style="font-weight:bold;display:block;">${c.user.name}</span><span style="opacity:0.9">${c.text}</span></div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            detailContent.innerHTML = `
+                <h2>${post.title}</h2>
+                <div style="display:flex; align-items:center; gap:15px; margin-bottom:20px; border-bottom:1px solid var(--pip-dim); padding-bottom:10px;">
+                    <img src="${post.author.avatar}" class="avatar" style="width:60px;height:60px;" data-user="${uStr}">
+                    <div><div>${post.author.name}</div><div style="color:var(--pip-dim)">${post.author.faction}</div></div>
+                    <div class="btn-like ${post.isLiked?'liked':''}" data-pid="${post.id}" style="margin-left:auto; font-size:24px;">
+                        [+] ENDORSE (<span class="like-num">${post.likes}</span>)
+                    </div>
+                </div>
+                <img src="${post.image}" class="detail-img-full">
+                <div class="detail-body">${post.content}</div>
+                <h3>COMMUNICATIONS</h3>
+                <div style="padding-bottom:100px;">${commentsHtml}</div>
+            `;
+            listView.style.display='none'; detailView.style.display='block'; detailView.scrollTop = 0;
+        }
+
+        initData();
+
+        // --- 4. 交互逻辑 (V9 核心) ---
+        const cursor = document.getElementById('cursor');
+        const loginModal = document.getElementById('login-modal');
+        const postModal = document.getElementById('post-modal');
+        const tooltip = document.getElementById('user-tooltip');
+        const emojiGrid = document.getElementById('emoji-grid');
+        const realFileInput = document.getElementById('real-file-input');
+
+        // 自动打字内容
+        const autoTitle = "Strange signal found near Sector 7...";
+        const autoBody = "I was exploring the glowing sea yesterday and picked up a repeating radio signal. Attached are the frequency coordinates.";
+
+        let isPinching = false, isClickLock = false;
+        let lastHovered = null;
+        let scrollSpeed = 0, scrollDir = 0;
+
+        function updateScroll() {
+            if(scrollDir !== 0) {
+                if(scrollSpeed < 20) scrollSpeed++;
+                (detailView.style.display==='block' ? detailView : listView).scrollBy(0, scrollDir * scrollSpeed);
+            } else scrollSpeed = 0;
+            requestAnimationFrame(updateScroll);
+        }
+        updateScroll();
+
+        function simulateTyping(element, text) {
+            element.value = ""; let i = 0;
+            const interval = setInterval(() => {
+                element.value += text.charAt(i); AudioSys.type(); i++;
+                if(i >= text.length) clearInterval(interval);
+            }, 30);
+        }
+
+        function onResults(results) {
+            if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
+            const lm = results.multiHandLandmarks[0];
+            
+            let mX = (1 - lm[8].x - 0.15) / 0.7; 
+            let mY = (lm[8].y - 0.15) / 0.7;
+            let cX = Math.max(0, Math.min(1, mX)) * window.innerWidth;
+            let cY = Math.max(0, Math.min(1, mY)) * window.innerHeight;
+            
+            const currLeft = parseFloat(cursor.style.left||cX);
+            const currTop = parseFloat(cursor.style.top||cY);
+            cursor.style.left = (currLeft + (cX - currLeft)*0.3) + 'px';
+            cursor.style.top = (currTop + (cY - currTop)*0.3) + 'px';
+
+            cursor.style.display = 'none';
+            const el = document.elementFromPoint(cX, cY);
+            cursor.style.display = 'block';
+
+            const interactive = el ? el.closest('.nav-btn, .post-card, .btn-action, .modal-close, .form-input, .toolbar-btn, .login-btn-top, .avatar, .btn-like, .back-btn, .social-btn, .emoji-item') : null;
+            if(interactive && interactive !== lastHovered) {
+                AudioSys.hover();
+                document.querySelectorAll('.hovered').forEach(e=>e.classList.remove('hovered'));
+                interactive.classList.add('hovered');
+            } else if(!interactive) {
+                document.querySelectorAll('.hovered').forEach(e=>e.classList.remove('hovered'));
+            }
+            lastHovered = interactive;
+
+            if(el && el.classList.contains('avatar')) {
+                try {
+                    const u = JSON.parse(decodeURIComponent(el.dataset.user));
+                    document.getElementById('tt-content').innerHTML = `ID: ${u.name}<br>Faction: ${u.faction}<br>Karma: ${u.karma}`;
+                    tooltip.style.display = 'block'; tooltip.style.left=(cX+20)+'px'; tooltip.style.top=cY+'px';
+                } catch(e){}
+            } else tooltip.style.display = 'none';
+
+            const dist = Math.hypot(lm[8].x - lm[4].x, lm[8].y - lm[4].y);
+            if(dist < 0.05) {
+                if(!isPinching) {
+                    isPinching = true;
+                    cursor.classList.add('clicking');
+                    handleTap(el);
+                }
+            } else {
+                isPinching = false;
+                cursor.classList.remove('clicking');
+                scrollDir = 0; document.querySelectorAll('.scroll-btn').forEach(b=>b.classList.remove('active-scroll'));
+            }
+        }
+
+        function handleTap(el) {
+            if(!el) return;
+            AudioSys.click();
+
+            const sBtn = el.closest('.scroll-btn');
+            if(sBtn) { sBtn.classList.add('active-scroll'); scrollDir = sBtn.id==='scroll-up'?-1:1; return; }
+
+            if(isClickLock) return;
+            isClickLock = true; setTimeout(()=>isClickLock=false, 500);
+
+            // 登录/登出
+            if(el.closest('#btn-auth')) {
+                if(State.isLoggedIn) {
+                    State.isLoggedIn = false; AudioSys.logout();
+                    document.getElementById('header-username').classList.remove('active');
+                    document.getElementById('btn-auth').innerText = "LOGIN / SIGNUP";
+                    alert("SYSTEM: LOGGING OFF...");
+                } else {
+                    loginModal.style.display = 'flex';
+                }
+                return;
+            }
+
+            // 登录提交 (含社交登录)
+            if(el.closest('#btn-login-submit') || el.closest('.social-btn')) {
+                const btn = el.closest('#btn-login-submit') || el.closest('.social-btn');
+                btn.style.background = "#fff"; // 视觉反馈
+                setTimeout(() => {
+                    State.isLoggedIn = true;
+                    State.currentUser = getRandomUser();
+                    State.currentUser.name = "Vault_Dweller";
+                    AudioSys.success();
+                    loginModal.style.display = 'none';
+                    document.getElementById('header-username').innerText = "USER: VAULT_DWELLER";
+                    document.getElementById('header-username').classList.add('active');
+                    document.getElementById('btn-auth').innerText = "[ LOGOUT ]";
+                    if(btn.id === 'btn-login-submit') btn.innerText = "AUTHENTICATE";
+                    else btn.style.background = ""; 
+                }, 800);
+                return;
+            }
+
+            // 发帖相关
+            if(el.closest('#btn-open-post')) {
+                if(!State.isLoggedIn) { alert("ACCESS DENIED. PLEASE LOGIN."); return; }
+                postModal.style.display = 'flex';
+                emojiGrid.style.display = 'none';
+                return;
+            }
+
+            // 真实文件上传调用
+            if(el.closest('.toolbar-btn') && el.closest('.toolbar-btn').dataset.type === 'file') {
+                realFileInput.click(); // 触发隐藏的 input click
+                return;
+            }
+
+            // Emoji 切换
+            if(el.closest('#btn-emoji')) {
+                emojiGrid.style.display = emojiGrid.style.display === 'grid' ? 'none' : 'grid';
+                return;
+            }
+            // Emoji 选择
+            if(el.classList.contains('emoji-item')) {
+                document.getElementById('post-body').value += el.innerText;
+                return;
+            }
+
+            if(el.id === 'post-title') { simulateTyping(el, autoTitle); return; }
+            if(el.id === 'post-body') { simulateTyping(el, autoBody); return; }
+
+            if(el.closest('#btn-post-submit')) {
+                const title = document.getElementById('post-title').value;
+                if(!title) { alert("ERROR: NO DATA"); return; }
+                AudioSys.upload();
+                const newPost = {
+                    id: Date.now(),
+                    category: "DISCUSSION",
+                    title: title,
+                    author: State.currentUser,
+                    likes: 0, isLiked: false,
+                    image: `https://picsum.photos/seed/${Date.now()}/500/300`,
+                    content: document.getElementById('post-body').value || "No text data.",
+                    comments: []
+                };
+                State.posts.unshift(newPost);
+                renderList("ALL");
+                postModal.style.display = 'none';
+                return;
+            }
+
+            if(el.closest('.modal-close')) {
+                document.getElementById(el.closest('.modal-close').dataset.target).style.display = 'none';
+                return;
+            }
+
+            const nav = el.closest('.nav-btn');
+            if(nav && !nav.id) {
+                document.querySelectorAll('.nav-btn').forEach(n=>n.classList.remove('active'));
+                nav.classList.add('active');
+                renderList(nav.dataset.cat);
+                detailView.style.display='none'; listView.style.display='block';
+                return;
+            }
+
+            if(el.closest('#btn-back')) { detailView.style.display='none'; listView.style.display='block'; return; }
+
+            // 点赞 / 取消点赞 (Toggle)
+            const like = el.closest('.btn-like');
+            if(like) {
+                const p = State.posts.find(x=>x.id == like.dataset.pid);
+                if(p) {
+                    if (p.isLiked) {
+                        p.likes--; p.isLiked = false;
+                        like.classList.remove('liked');
+                    } else {
+                        p.likes++; p.isLiked = true;
+                        like.classList.add('liked');
+                        AudioSys.success();
+                    }
+                    // 更新 UI 数字
+                    const numSpan = like.querySelector('.like-num');
+                    if(numSpan) numSpan.innerText = p.likes;
+                }
+                return;
+            }
+
+            const card = el.closest('.post-card');
+            if(card) showDetail(card.dataset.id);
+        }
+
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5});
+        hands.onResults(onResults);
+        const cam = new Camera(document.querySelector('.input_video'), {
+            onFrame: async () => await hands.send({image: document.querySelector('.input_video')}),
+            width: 1280, height: 720
+        });
+        cam.start();
+    </script>
+</body>
+</html>

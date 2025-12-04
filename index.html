@@ -41,7 +41,6 @@
             box-shadow: inset 0 0 100px rgba(0,0,0,0.8); pointer-events: none; z-index: 9001;
         }
 
-        /* 启动画面 */
         #boot-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; z-index: 100000;
@@ -126,6 +125,20 @@
         #list-view { padding: 80px 40px 100px 40px; height: 100%; overflow-y: auto; }
         ::-webkit-scrollbar { display: none; }
 
+        /* 排序栏样式 */
+        .sort-bar {
+            display: flex; gap: 20px; margin-bottom: 20px; 
+            border-bottom: 1px dashed var(--pip-dim); padding-bottom: 10px;
+            align-items: center;
+        }
+        .sort-label { color: var(--pip-dim); font-size: 20px; }
+        .sort-btn { 
+            cursor: pointer; padding: 5px 10px; border: 1px solid transparent; 
+            color: var(--pip-dim); transition: 0.2s; font-size: 20px;
+        }
+        .sort-btn.active { color: var(--pip-green); border: 1px solid var(--pip-green); background: rgba(30, 255, 0, 0.1); }
+        .sort-btn.hovered { color: #fff; text-shadow: 0 0 5px var(--pip-green); }
+
         .post-card {
             display: flex; border: 1px solid var(--pip-dim); margin-bottom: 20px;
             background: rgba(0, 20, 0, 0.6); transition: 0.2s; height: 130px;
@@ -178,16 +191,24 @@
             border: 1px solid var(--pip-dim); padding: 15px; background: rgba(0, 30, 0, 0.3);
             display: flex; gap: 15px; align-items: flex-start;
         }
-        .comment-sub { 
-            margin-left: 50px; border-left: 2px dashed var(--pip-dim); 
-            padding-left: 15px; margin-top: 10px; 
+        /* 评论点赞按钮样式 (New in V12) */
+        .btn-comment-like {
+            cursor: pointer; border: 1px solid var(--pip-dim); padding: 2px 8px;
+            font-size: 16px; color: var(--pip-dim); transition: 0.2s;
+            display: flex; align-items: center; gap: 5px;
         }
-        .sub-item {
-            display: flex; gap: 10px; margin-bottom: 10px; padding: 10px;
-            background: rgba(0,0,0,0.5); border: 1px solid #002200;
-        }
+        .btn-comment-like.liked { border-color: var(--pip-green); background: var(--pip-green); color: #000; }
+        .btn-comment-like.hovered { border-color: var(--pip-green); color: var(--pip-green); }
+        .btn-comment-like.liked.hovered { background: #fff; }
 
-        /* --- 5. 模态框 (登录 & 发帖) --- */
+        .comment-input-area {
+            border: 1px solid var(--pip-green); padding: 15px; margin-bottom: 30px;
+            background: rgba(0, 20, 0, 0.5);
+        }
+        .emoji-quick-btn { font-size: 24px; padding: 5px; cursor: pointer; border: 1px solid transparent; }
+        .emoji-quick-btn.hovered { border-color: var(--pip-green); background: rgba(30, 255, 0, 0.2); }
+
+        /* --- 5. 模态框 --- */
         .modal-overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.9); z-index: 20000;
@@ -213,14 +234,12 @@
         }
         .btn-action.hovered { background: var(--pip-green); color: #000; }
 
-        /* 发帖工具栏 */
         .post-toolbar { display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--pip-dim); padding-bottom: 10px; position: relative; }
         .toolbar-btn {
             border: 1px solid var(--pip-dim); padding: 5px 15px; font-size: 20px; color: var(--pip-dim);
         }
         .toolbar-btn.hovered { color: var(--pip-green); border-color: var(--pip-green); }
 
-        /* Emoji 选择器 */
         #emoji-grid {
             display: none; position: absolute; top: 50px; left: 0; 
             background: #000; border: 1px solid var(--pip-green); padding: 10px;
@@ -229,7 +248,6 @@
         .emoji-item { font-size: 24px; cursor: pointer; padding: 5px; }
         .emoji-item.hovered { background: var(--pip-green); }
 
-        /* 社交登录 */
         .social-btn {
             flex: 1; border: 1px solid var(--pip-dim); padding: 10px;
             text-align: center; color: var(--pip-dim); font-size: 20px;
@@ -237,7 +255,6 @@
         }
         .social-btn.hovered { border-color: var(--pip-green); color: var(--pip-green); }
 
-        /* 悬浮窗 */
         #user-tooltip {
             display: none; position: fixed; width: 300px; 
             background: #000; border: 2px solid var(--pip-green);
@@ -245,7 +262,6 @@
         }
 
         .input_video { display: none; }
-        /* 隐藏的真实文件输入框 */
         #real-file-input { display: none; }
     </style>
 </head>
@@ -255,25 +271,21 @@
     <div class="crt-overlay"></div>
     <div id="cursor"></div>
     <video class="input_video"></video>
-    <!-- 真实文件上传控件 (隐藏) -->
     <input type="file" id="real-file-input">
 
-    <!-- 启动画面 -->
     <div id="boot-screen">
         <div id="boot-text">
             > PIP-BOY MOD GARAGE<br>
-            > OS V9.0 ONLINE<br><br>
+            > LINKING...<br><br>
             [ CLICK TO INITIALIZE ]
         </div>
     </div>
 
-    <!-- 悬浮窗 -->
     <div id="user-tooltip">
         <div style="border-bottom:1px solid var(--pip-dim); margin-bottom:5px;">USER DATA</div>
         <div id="tt-content"></div>
     </div>
 
-    <!-- 1. 登录模态框 -->
     <div id="login-modal" class="modal-overlay">
         <div class="modal-box">
             <div class="modal-close" data-target="login-modal">×</div>
@@ -289,29 +301,22 @@
         </div>
     </div>
 
-    <!-- 2. 发帖模态框 -->
     <div id="post-modal" class="modal-overlay">
         <div class="modal-box" style="width: 700px;">
             <div class="modal-close" data-target="post-modal">×</div>
             <h2>TRANSMIT NEW ENTRY</h2>
-            
             <input type="text" class="form-input" id="post-title" placeholder="SUBJECT LINE (PINCH TO AUTO-FILL)">
-            
             <div class="post-toolbar">
                 <div class="toolbar-btn" data-type="file"><i class="fas fa-image"></i> IMG</div>
                 <div class="toolbar-btn" data-type="file"><i class="fas fa-video"></i> VID</div>
                 <div class="toolbar-btn" data-type="file"><i class="fas fa-paperclip"></i> ATT</div>
                 <div class="toolbar-btn" id="btn-emoji"><i class="far fa-smile"></i> EMOJI</div>
-                
-                <!-- Emoji Grid -->
                 <div id="emoji-grid">
                     <div class="emoji-item">☢️</div><div class="emoji-item">👍</div><div class="emoji-item">💀</div><div class="emoji-item">💩</div><div class="emoji-item">🔫</div>
                     <div class="emoji-item">🤖</div><div class="emoji-item">💊</div><div class="emoji-item">💣</div><div class="emoji-item">🛠️</div><div class="emoji-item">👽</div>
                 </div>
             </div>
-
             <textarea class="form-textarea" id="post-body" placeholder="ENTER MESSAGE DATA... (PINCH TO AUTO-FILL)"></textarea>
-
             <button class="btn-action" id="btn-post-submit">TRANSMIT DATA</button>
         </div>
     </div>
@@ -352,7 +357,6 @@
     </div>
 
     <script>
-        // --- 0. 音频引擎 ---
         const AudioSys = {
             ctx: null,
             init: function() {
@@ -378,18 +382,18 @@
             upload: function() { const now = this.ctx.currentTime; for(let i=0; i<10; i++) setTimeout(() => this.play(1000 + Math.random()*1000, 'square', 0.05, 0.05), i*50); }
         };
 
-        // --- 1. 状态管理 ---
         const State = {
             isLoggedIn: false,
             currentUser: { name: "Guest", avatar: "" },
-            posts: []
+            posts: [],
+            postSortMode: 'TIME',
+            commSortMode: 'TIME'
         };
 
         document.getElementById('boot-screen').addEventListener('click', function() {
             AudioSys.init(); AudioSys.success(); this.style.display = 'none';
         });
 
-        // --- 2. 真实内容数据 (还原 V6 风格) ---
         const userPrefix = ["Nuka", "Vault", "Deathclaw", "Radioactive", "Piper", "Ghoul", "Plasma", "Laser"];
         const userSuffix = ["Slayer", "Survivor", "Lover", "Fan69", "Master", "King", "Enjoyer", "_Official"];
 
@@ -428,34 +432,56 @@
                     const replies = [template.reply, "Endorsed!", "Works for me.", "Update plzzzz", "Can you make a patch for this?", "LMAO", "Delete this.", "War... war never changes."];
                     comments.push({
                         user: cUser,
-                        text: replies[Math.floor(Math.random() * replies.length)]
+                        text: replies[Math.floor(Math.random() * replies.length)],
+                        likes: Math.floor(Math.random() * 50),
+                        timestamp: Date.now() - Math.floor(Math.random() * 10000000),
+                        id: Math.random(), // Unique ID for comment
+                        isLiked: false
                     });
                 }
+                comments.sort((a,b) => b.timestamp - a.timestamp);
 
                 State.posts.push({
-                    id: i,
+                    id: Date.now() - Math.floor(Math.random() * 100000000),
                     category: template.cat,
                     title: template.title,
                     author: author,
                     likes: Math.floor(Math.random() * 5000) + 5,
                     isLiked: false,
                     image: `https://picsum.photos/seed/${i + 888}/600/300`,
-                    content: template.body + "\n\n(Posted from Pip-Boy Mod Garage V9.0)",
+                    content: template.body + "\n\n(Posted from Pip-Boy Mod Garage V12.0)",
                     comments: comments
                 });
             }
+            State.posts.sort((a,b) => b.id - a.id);
             renderList("ALL");
         }
 
-        // --- 3. 渲染 UI ---
         const listView = document.getElementById('list-view');
         const detailView = document.getElementById('detail-view');
         const detailContent = document.getElementById('detail-content');
 
         function renderList(cat) {
-            listView.innerHTML = "";
-            const filtered = cat === "ALL" ? State.posts : State.posts.filter(p => p.category === cat);
-            filtered.forEach(post => {
+            let sortBarHtml = `
+                <div class="sort-bar">
+                    <span class="sort-label">SORT FEED:</span>
+                    <span class="sort-btn post-sort-btn ${State.postSortMode==='TIME'?'active':''}" data-mode="TIME">[ TIME ]</span>
+                    <span class="sort-btn post-sort-btn ${State.postSortMode==='HEAT'?'active':''}" data-mode="HEAT">[ HEAT ]</span>
+                </div>
+            `;
+            
+            let filtered = cat === "ALL" ? State.posts : State.posts.filter(p => p.category === cat);
+            
+            let displayPosts = [...filtered];
+            if(State.postSortMode === 'TIME') {
+                displayPosts.sort((a,b) => b.id - a.id);
+            } else {
+                displayPosts.sort((a,b) => b.likes - a.likes);
+            }
+
+            listView.innerHTML = sortBarHtml;
+            
+            displayPosts.forEach(post => {
                 const div = document.createElement('div');
                 div.className = 'post-card';
                 div.dataset.id = post.id;
@@ -484,16 +510,57 @@
             if(!post) return;
             const uStr = encodeURIComponent(JSON.stringify(post.author));
             
-            let commentsHtml = post.comments.map(c => {
+            let displayComments = [...post.comments];
+            if(State.commSortMode === 'TIME') {
+                displayComments.sort((a,b) => b.timestamp - a.timestamp);
+            } else {
+                displayComments.sort((a,b) => b.likes - a.likes);
+            }
+
+            let commentsHtml = displayComments.map(c => {
                 const cStr = encodeURIComponent(JSON.stringify(c.user));
                 return `
                 <div class="comment-node">
                     <div class="comment-main">
                         <img src="${c.user.avatar}" class="avatar" data-user="${cStr}">
-                        <div><span style="font-weight:bold;display:block;">${c.user.name}</span><span style="opacity:0.9">${c.text}</span></div>
+                        <div style="flex:1">
+                            <div style="display:flex; justify-content:space-between;">
+                                <span style="font-weight:bold;">${c.user.name}</span>
+                                <!-- New Comment Like Button -->
+                                <div class="btn-comment-like ${c.isLiked?'liked':''}" data-pid="${post.id}" data-cid="${c.id}">
+                                    <i class="fas fa-thumbs-up"></i> <span class="c-like-num">${c.likes}</span>
+                                </div>
+                            </div>
+                            <span style="opacity:0.9">${c.text}</span>
+                        </div>
                     </div>
                 </div>`;
             }).join('');
+
+            let replyBoxHtml = '';
+            if (State.isLoggedIn) {
+                replyBoxHtml = `
+                <div class="comment-input-area">
+                    <div style="margin-bottom:10px; color:var(--pip-dim);">TRANSMIT A REPLY:</div>
+                    <textarea id="comment-input" class="form-textarea" style="height:80px;" placeholder="ENTER TEXT... (PINCH TO AUTO-FILL)"></textarea>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span class="emoji-quick-btn" data-char="👍">👍</span>
+                        <span class="emoji-quick-btn" data-char="❤️">❤️</span>
+                        <span class="emoji-quick-btn" data-char="😂">😂</span>
+                        <span class="emoji-quick-btn" data-char="💩">💩</span>
+                        <span class="emoji-quick-btn" data-char="☢️">☢️</span>
+                        <button class="btn-action" id="btn-submit-comment" style="width:auto; margin:0; margin-left:auto; padding:5px 20px;">SEND</button>
+                    </div>
+                </div>`;
+            }
+
+            let commSortHtml = `
+                <div class="sort-bar" style="border-bottom:none; margin-bottom:10px; font-size:18px;">
+                    <span class="sort-label">SORT COMMS:</span>
+                    <span class="sort-btn comm-sort-btn ${State.commSortMode==='TIME'?'active':''}" data-mode="TIME">[ LATEST ]</span>
+                    <span class="sort-btn comm-sort-btn ${State.commSortMode==='HEAT'?'active':''}" data-mode="HEAT">[ TOP ]</span>
+                </div>
+            `;
 
             detailContent.innerHTML = `
                 <h2>${post.title}</h2>
@@ -507,14 +574,17 @@
                 <img src="${post.image}" class="detail-img-full">
                 <div class="detail-body">${post.content}</div>
                 <h3>COMMUNICATIONS</h3>
+                ${commSortHtml}
+                ${replyBoxHtml}
                 <div style="padding-bottom:100px;">${commentsHtml}</div>
             `;
-            listView.style.display='none'; detailView.style.display='block'; detailView.scrollTop = 0;
+            
+            detailView.dataset.currentPostId = post.id;
+            listView.style.display='none'; detailView.style.display='block';
         }
 
         initData();
 
-        // --- 4. 交互逻辑 (V9 核心) ---
         const cursor = document.getElementById('cursor');
         const loginModal = document.getElementById('login-modal');
         const postModal = document.getElementById('post-modal');
@@ -522,9 +592,9 @@
         const emojiGrid = document.getElementById('emoji-grid');
         const realFileInput = document.getElementById('real-file-input');
 
-        // 自动打字内容
         const autoTitle = "Strange signal found near Sector 7...";
         const autoBody = "I was exploring the glowing sea yesterday and picked up a repeating radio signal. Attached are the frequency coordinates.";
+        const autoComment = "Great find! I'll check it out tonight. Ad Victoriam.";
 
         let isPinching = false, isClickLock = false;
         let lastHovered = null;
@@ -565,7 +635,7 @@
             const el = document.elementFromPoint(cX, cY);
             cursor.style.display = 'block';
 
-            const interactive = el ? el.closest('.nav-btn, .post-card, .btn-action, .modal-close, .form-input, .toolbar-btn, .login-btn-top, .avatar, .btn-like, .back-btn, .social-btn, .emoji-item') : null;
+            const interactive = el ? el.closest('.nav-btn, .post-card, .btn-action, .modal-close, .form-input, .form-textarea, .toolbar-btn, .login-btn-top, .avatar, .btn-like, .back-btn, .social-btn, .emoji-item, .emoji-quick-btn, .sort-btn, .btn-comment-like') : null;
             if(interactive && interactive !== lastHovered) {
                 AudioSys.hover();
                 document.querySelectorAll('.hovered').forEach(e=>e.classList.remove('hovered'));
@@ -607,7 +677,20 @@
             if(isClickLock) return;
             isClickLock = true; setTimeout(()=>isClickLock=false, 500);
 
-            // 登录/登出
+            if(el.classList.contains('post-sort-btn')) {
+                State.postSortMode = el.dataset.mode;
+                const activeCat = document.querySelector('.nav-btn.active') ? document.querySelector('.nav-btn.active').dataset.cat : 'ALL';
+                renderList(activeCat);
+                return;
+            }
+
+            if(el.classList.contains('comm-sort-btn')) {
+                State.commSortMode = el.dataset.mode;
+                const currentId = document.getElementById('detail-view').dataset.currentPostId;
+                if(currentId) showDetail(currentId);
+                return;
+            }
+
             if(el.closest('#btn-auth')) {
                 if(State.isLoggedIn) {
                     State.isLoggedIn = false; AudioSys.logout();
@@ -620,10 +703,9 @@
                 return;
             }
 
-            // 登录提交 (含社交登录)
             if(el.closest('#btn-login-submit') || el.closest('.social-btn')) {
                 const btn = el.closest('#btn-login-submit') || el.closest('.social-btn');
-                btn.style.background = "#fff"; // 视觉反馈
+                btn.style.background = "#fff"; 
                 setTimeout(() => {
                     State.isLoggedIn = true;
                     State.currentUser = getRandomUser();
@@ -639,7 +721,6 @@
                 return;
             }
 
-            // 发帖相关
             if(el.closest('#btn-open-post')) {
                 if(!State.isLoggedIn) { alert("ACCESS DENIED. PLEASE LOGIN."); return; }
                 postModal.style.display = 'flex';
@@ -647,18 +728,15 @@
                 return;
             }
 
-            // 真实文件上传调用
             if(el.closest('.toolbar-btn') && el.closest('.toolbar-btn').dataset.type === 'file') {
-                realFileInput.click(); // 触发隐藏的 input click
+                realFileInput.click();
                 return;
             }
 
-            // Emoji 切换
             if(el.closest('#btn-emoji')) {
                 emojiGrid.style.display = emojiGrid.style.display === 'grid' ? 'none' : 'grid';
                 return;
             }
-            // Emoji 选择
             if(el.classList.contains('emoji-item')) {
                 document.getElementById('post-body').value += el.innerText;
                 return;
@@ -672,18 +750,35 @@
                 if(!title) { alert("ERROR: NO DATA"); return; }
                 AudioSys.upload();
                 const newPost = {
-                    id: Date.now(),
-                    category: "DISCUSSION",
-                    title: title,
-                    author: State.currentUser,
-                    likes: 0, isLiked: false,
+                    id: Date.now(), category: "DISCUSSION", title: title,
+                    author: State.currentUser, likes: 0, isLiked: false,
                     image: `https://picsum.photos/seed/${Date.now()}/500/300`,
-                    content: document.getElementById('post-body').value || "No text data.",
-                    comments: []
+                    content: document.getElementById('post-body').value || "No text data.", comments: []
                 };
                 State.posts.unshift(newPost);
                 renderList("ALL");
                 postModal.style.display = 'none';
+                return;
+            }
+
+            if(el.id === 'comment-input') { simulateTyping(el, autoComment); return; }
+            if(el.classList.contains('emoji-quick-btn')) {
+                const box = document.getElementById('comment-input');
+                if(box) box.value += el.dataset.char;
+                return;
+            }
+            if(el.closest('#btn-submit-comment')) {
+                const box = document.getElementById('comment-input');
+                if(!box.value) return;
+                AudioSys.upload();
+                const currentId = document.getElementById('detail-view').dataset.currentPostId;
+                const post = State.posts.find(p => p.id == currentId);
+                if(post) {
+                    post.comments.unshift({
+                        user: State.currentUser, text: box.value, likes: 0, timestamp: Date.now(), id: Math.random(), isLiked: false
+                    });
+                    showDetail(post.id);
+                }
                 return;
             }
 
@@ -703,28 +798,41 @@
 
             if(el.closest('#btn-back')) { detailView.style.display='none'; listView.style.display='block'; return; }
 
-            // 点赞 / 取消点赞 (Toggle)
+            // 帖子点赞
             const like = el.closest('.btn-like');
             if(like) {
                 const p = State.posts.find(x=>x.id == like.dataset.pid);
                 if(p) {
-                    if (p.isLiked) {
-                        p.likes--; p.isLiked = false;
-                        like.classList.remove('liked');
-                    } else {
-                        p.likes++; p.isLiked = true;
-                        like.classList.add('liked');
-                        AudioSys.success();
-                    }
-                    // 更新 UI 数字
+                    if (p.isLiked) { p.likes--; p.isLiked = false; like.classList.remove('liked'); } 
+                    else { p.likes++; p.isLiked = true; like.classList.add('liked'); AudioSys.success(); }
                     const numSpan = like.querySelector('.like-num');
                     if(numSpan) numSpan.innerText = p.likes;
                 }
                 return;
             }
 
+            // 评论点赞 (New in V12)
+            const cLike = el.closest('.btn-comment-like');
+            if(cLike) {
+                const pid = cLike.dataset.pid;
+                const cid = cLike.dataset.cid;
+                const post = State.posts.find(p => p.id == pid);
+                if(post) {
+                    const c = post.comments.find(c => c.id == cid);
+                    if(c) {
+                        if(c.isLiked) { c.likes--; c.isLiked = false; cLike.classList.remove('liked'); }
+                        else { c.likes++; c.isLiked = true; cLike.classList.add('liked'); AudioSys.success(); }
+                        cLike.querySelector('.c-like-num').innerText = c.likes;
+                    }
+                }
+                return;
+            }
+
             const card = el.closest('.post-card');
-            if(card) showDetail(card.dataset.id);
+            if(card) {
+                document.getElementById('detail-view').dataset.currentPostId = card.dataset.id;
+                showDetail(card.dataset.id);
+            }
         }
 
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
